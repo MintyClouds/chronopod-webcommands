@@ -113,6 +113,12 @@ def set_mute():
         return json_response(error={'value not passed'})
 
     muted = data['value']
+    if not isinstance(muted, bool):
+        if muted == 'on':
+            muted = True
+        else:
+            muted = False
+
     if muted:
         mute_setting = 'mute'
     else:
@@ -120,6 +126,7 @@ def set_mute():
 
     answer = send_amixer_command('sset', mute_setting)
     volume = request_amixer_volume()
+    print(volume)
     return json_response(result=volume)
 
 
