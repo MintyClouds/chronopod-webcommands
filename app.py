@@ -50,7 +50,7 @@ def request_amixer_volume(output_splitted=False):
             value = attrs[-2][1:-1]
         else:
             name = name[:-1]
-            value = attrs[-3]
+            value = attrs[-3][1:-1]
 
         enabled = attrs[-1]
         if '\n' in enabled:
