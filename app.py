@@ -105,5 +105,23 @@ def set_volume():
     return json_response(result=volume)
 
 
+@app.route('/set_mute', methods=['POST'])
+def set_mute():
+    data = request.get_json(force=True)
+
+    if 'value' not in data:
+        return json_response(error={'value not passed'})
+
+    muted = data['value']
+    if muted:
+        mute_setting = 'mute'
+    else:
+        mute_setting = 'unmute'
+
+    answer = send_amixer_command('sset', mute_setting)
+    volume = request_amixer_volume()
+    return json_response(result=volume)
+
+
 if __name__=='__main__':
     app.run()
