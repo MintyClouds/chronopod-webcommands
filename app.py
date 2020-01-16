@@ -44,8 +44,14 @@ def request_amixer_volume(output_splitted=False):
     for channel in channel_list:
         attrs = channel.split(' ')
 
-        name = attrs[0] + attrs[1][:-1]
-        value = attrs[-2][1:-1]
+        name = attrs[0]
+        if card_stereo:
+            name +=  attrs[1][:-1]
+            value = attrs[-2][1:-1]
+        else:
+            name = name[:-1]
+            value = attrs[-3]
+
         enabled = attrs[-1]
         if '\n' in enabled:
              enabled = enabled.replace('\n', '')
