@@ -100,6 +100,7 @@ def request_amixer_volume(output_splitted=False):
 
 def request_plexamp_state():
     state = send_systemctl_plexamp('status')
+    print(state)
     active = state[2].split(' ')[2][1:-1]
     return active
 
