@@ -14,15 +14,37 @@ FlaskJSON(app)
 app.config['JSON_ADD_STATUS'] = False
 app.config['JSON_DATETIME_FORMAT'] = '%d/%m/%Y %H:%M:%S'
 
-def send_amixer_command(command, value=None):
-    command = ['amixer', command, AMIXER_CARD]
-    if value:
-        command.append(value)
+def send_cmdline_command(daemon, command, args=None, delimiter='\n  ', perm=False):
+    command = [daemon, command]
+
+    if args is not None:
+        for arg in args:
+            command.append(arg)
+
+    if perm:
+        command.insert(0, 'sudo')
 
     proc = Popen(command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
-    output = stdout.decode('utf-8').split('\n  ')
+    output = stdout.decode('utf-8').split(delimiter)
     return output
+
+def send_amixer_command(command, value=None):
+    daemon = 'amixer'
+    args = [AMIXER_CARD]
+    if value:
+        args.append(value)
+
+    result = send_cmdline_command(daemon, command, args)
+    return result
+
+def send_systemctl_plexamp(command):
+    daemon = 'systemctl'
+    args = ['plexamp']
+    additional_perm = True
+
+    result = send_cmdline_command(daemon, command, args, '\n   ', additional_perm)
+    return result
 
 def is_stereo_card(data):
     playback_channels = data[2].split(': ')
@@ -76,6 +98,11 @@ def request_amixer_volume(output_splitted=False):
 
     return card_state
 
+def request_plexamp_state():
+    state = send_systemctl_plexamp('status')
+    active = state[2].split(' ')[2][1:-1]
+    return active
+
 
 @app.route('/get_volume', methods=['GET', 'POST'])
 def get_volume():
@@ -115,19 +142,45 @@ def set_mute():
     muted = data['value']
     if not isinstance(muted, bool):
         if muted == 'on':
-            muted = True
+#            muted = True
+            mute_setting = 'mute'
         else:
-            muted = False
+#            muted = False
+            mute_setting = 'unmute'
 
-    if muted:
-        mute_setting = 'mute'
-    else:
-        mute_setting = 'unmute'
+#    if muted:
+#        mute_setting = 'mute'
+#    else:
+#        mute_setting = 'unmute'
 
     answer = send_amixer_command('sset', mute_setting)
     volume = request_amixer_volume()
     print(volume)
     return json_response(result=volume)
+
+
+@app.route('/get_plexamp_state', methods=['GET'])
+def get_plexamp_state():
+    return json_response(result=request_plexamp_state())
+
+@app.route('/set_plexamp_state', methods=['POST'])
+def systemctl_plexamp():
+    data = request.get_json(force=True)
+
+    if 'value' not in data:
+        return json_response(error={'value not passed'})
+
+    state = data['value']
+    if not isinstance(state, bool):
+        if state == 'on':
+            state_setting = 'start'
+        else:
+            state_setting = 'stop'
+
+
+    answer = send_systemctl_plexamp(state_setting)
+    state = request_plexamp_state()
+    return json_response(result=state)
 
 
 if __name__=='__main__':
