@@ -14,6 +14,7 @@ FlaskJSON(app)
 app.config['JSON_ADD_STATUS'] = False
 app.config['JSON_DATETIME_FORMAT'] = '%d/%m/%Y %H:%M:%S'
 
+
 def send_cmdline_command(daemon, command, args=None, delimiter='\n  ', perm=False):
     command = [daemon, command]
 
@@ -24,10 +25,12 @@ def send_cmdline_command(daemon, command, args=None, delimiter='\n  ', perm=Fals
     if perm:
         command.insert(0, 'sudo')
 
+    print(command)
     proc = Popen(command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     stdout, stderr = proc.communicate()
     output = stdout.decode('utf-8').split(delimiter)
     return output
+
 
 def send_amixer_command(command, value=None):
     daemon = 'amixer'
@@ -38,6 +41,7 @@ def send_amixer_command(command, value=None):
     result = send_cmdline_command(daemon, command, args)
     return result
 
+
 def send_systemctl_plexamp(command):
     daemon = 'systemctl'
     args = ['plexamp']
@@ -46,9 +50,27 @@ def send_systemctl_plexamp(command):
     result = send_cmdline_command(daemon, command, args, '\n   ', additional_perm)
     return result
 
+
+def send_bluetoothctl_show():
+    daemon = 'bluetoothctl'
+    command = 'show'
+
+    result = send_cmdline_command(daemon, command, delimiter='\n\t')
+    return result
+
+
+def send_bluetoothctl_discoverable(state):
+    daemon = 'bluetoothctl'
+    command = 'discoverable'
+
+    result = send_cmdline_command(daemon, command, [state])
+    return result
+
+
 def is_stereo_card(data):
     playback_channels = data[2].split(': ')
     return False if playback_channels[1] == 'Mono' else True
+
 
 def request_amixer_volume(output_splitted=False):
     answer = send_amixer_command('sget')
@@ -56,7 +78,6 @@ def request_amixer_volume(output_splitted=False):
     card_stereo = is_stereo_card(answer)
 
     channel_values = {}
-    channels_synced = None
     if card_stereo:
         # getting value for each channel
         channel_list = [answer[-2], answer[-1]]
@@ -76,7 +97,7 @@ def request_amixer_volume(output_splitted=False):
 
         enabled = attrs[-1]
         if '\n' in enabled:
-             enabled = enabled.replace('\n', '')
+            enabled = enabled.replace('\n', '')
         enabled = enabled[1:-1]
 
         channel_values[name] = {'volume': value, 'enabled': enabled}
@@ -98,11 +119,57 @@ def request_amixer_volume(output_splitted=False):
 
     return card_state
 
+
 def request_plexamp_state():
     state = send_systemctl_plexamp('status')
     print(state)
     active = state[2].split(' ')[2][1:-1]
     return active
+
+
+def request_bluetoothctl_state():
+    state = send_bluetoothctl_show()
+    state_dict = {}
+    last_controller = None
+
+    for item in state:
+        if 'Controller' in item:
+            name = item.split(' ')[1]
+            last_controller = name
+            state_dict[name] = {}
+            state_dict[name]['profiles'] = {}
+
+        elif item == '':
+            continue
+        else:
+            if '\n' in item:
+                item = item.replace('\n', '')
+
+            controller = state_dict[last_controller]
+            controller_profiles = controller['profiles']
+
+            uuid_parse = False
+            if 'UUID' not in item:
+                split_symbol = ': '
+                result_dict = controller
+            else:
+                item = item[6:]
+                split_symbol = '('
+                uuid_parse = True
+                result_dict = controller_profiles
+
+            keyvalue = item.split(split_symbol)
+            item_key = keyvalue[0]
+            item_value = keyvalue[1]
+            if uuid_parse:
+                item_key = item_key.rstrip()
+                item_value = item_value[1:-1]
+            result_dict[item_key] = item_value
+
+    answer = {'controllers': state_dict}
+
+    return answer
+    # return state
 
 
 @app.route('/get_volume', methods=['GET', 'POST'])
@@ -126,7 +193,7 @@ def set_volume():
 
     value = str(data['value'])
     if '%' not in value:
-        value+= '%'
+        value += '%'
 
     answer = send_amixer_command('sset', value)
     volume = request_amixer_volume()
@@ -143,16 +210,9 @@ def set_mute():
     muted = data['value']
     if not isinstance(muted, bool):
         if muted == 'on':
-#            muted = True
             mute_setting = 'mute'
         else:
-#            muted = False
             mute_setting = 'unmute'
-
-#    if muted:
-#        mute_setting = 'mute'
-#    else:
-#        mute_setting = 'unmute'
 
     answer = send_amixer_command('sset', mute_setting)
     volume = request_amixer_volume()
@@ -163,6 +223,7 @@ def set_mute():
 @app.route('/get_plexamp_state', methods=['GET'])
 def get_plexamp_state():
     return json_response(result=request_plexamp_state())
+
 
 @app.route('/set_plexamp_state', methods=['POST'])
 def systemctl_plexamp():
@@ -178,9 +239,27 @@ def systemctl_plexamp():
         else:
             state_setting = 'stop'
 
-
     answer = send_systemctl_plexamp(state_setting)
     state = request_plexamp_state()
+    return json_response(result=state)
+
+
+@app.route('/get_bluetooth_discoverable', methods=['GET'])
+def get_bluetooth_discoverable_state():
+    return json_response(result=request_bluetoothctl_state())
+
+
+@app.route('/set_bluetooth_discoverable', methods=['POST'])
+def bluetoothctl_discoverable():
+    data = request.get_json(force=True)
+    print(data)
+
+    if 'value' not in data:
+        return json_response(error=['value not passed'])
+
+    state = data['value']
+    answer = send_bluetoothctl_discoverable(state)
+    state = request_bluetoothctl_state()
     return json_response(result=state)
 
 
