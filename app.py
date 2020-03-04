@@ -247,7 +247,7 @@ def systemctl_plexamp():
     return json_response(running=state)
 
 
-@app.route('/service_plexamp', methods=['POST'])
+@app.route('/service_plexamp', methods=['GET', 'POST'])
 def service_plexamp():
     if request.method == 'GET':
         return json_response(running=request_plexamp_state())
