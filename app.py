@@ -89,7 +89,7 @@ def request_amixer_volume(output_splitted=False):
 
         name = attrs[0]
         if card_stereo:
-            name +=  attrs[1][:-1]
+            name += attrs[1][:-1]
             value = attrs[-2][1:-1]
         else:
             name = name[:-1]
@@ -121,10 +121,13 @@ def request_amixer_volume(output_splitted=False):
 
 
 def request_plexamp_state():
-    state = send_systemctl_plexamp('status')
-    print(state)
-    active = state[2].split(' ')[2][1:-1]
-    return active
+    status = send_systemctl_plexamp('status')
+    print(status)
+    active = status[2].split(' ')[2][1:-1]
+    state = False
+    if active == 'running':
+        state = True
+    return state
 
 
 def request_bluetoothctl_state():
@@ -222,7 +225,7 @@ def set_mute():
 
 @app.route('/get_plexamp_state', methods=['GET'])
 def get_plexamp_state():
-    return json_response(result=request_plexamp_state())
+    return json_response(running=request_plexamp_state())
 
 
 @app.route('/set_plexamp_state', methods=['POST'])
@@ -241,7 +244,30 @@ def systemctl_plexamp():
 
     answer = send_systemctl_plexamp(state_setting)
     state = request_plexamp_state()
-    return json_response(result=state)
+    return json_response(running=state)
+
+
+@app.route('/service_plexamp', methods=['POST'])
+def service_plexamp():
+    if request.method == 'GET':
+        return json_response(running=request_plexamp_state())
+
+    elif request.method == 'POST':
+        data = request.get_json(force=True)
+
+        if 'value' not in data:
+            return json_response(error={'value not passed'})
+
+        state = data['value']
+        if not isinstance(state, bool):
+            if state == 'on':
+                state_setting = 'start'
+            else:
+                state_setting = 'stop'
+
+        answer = send_systemctl_plexamp(state_setting)
+        state = request_plexamp_state()
+        return json_response(running=state)
 
 
 @app.route('/get_bluetooth_discoverable', methods=['GET'])
